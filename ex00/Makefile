@@ -1,5 +1,5 @@
 NAME     = convert
-SRC      = 
+SRC      = Converter.cpp main.cpp
 OBJ_DIR  = obj
 OBJ      = $(SRC:%.cpp=$(OBJ_DIR)/%.o)
 
@@ -27,5 +27,3 @@ re: fclean all
 -include $(OBJ:.o=.d)
 
 .PHONY: all clean fclean re
-
-# RobotomyRequest.cpp ShrubberyCreation.cpp
