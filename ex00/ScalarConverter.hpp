@@ -31,8 +31,7 @@ class ScalarConverter
 //took it from there
 enum	_type
 {
-	PSEUDO = 0,
-	CHAR,
+	CHAR = 0,
 	INT,
 	FLOAT,
 	DOUBLE,

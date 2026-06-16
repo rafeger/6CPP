@@ -18,17 +18,7 @@ ScalarConverter &ScalarConverter::operator=(const ScalarConverter &other)
 	return *this;
 }
 
-//is the whole string a valid pseudo-literal (nan/nanf/+-inf/+-inff) ?
-static bool	isPseudo(const std::string &rep)
-{
-	if (rep == "-inf" || rep == "+inf" || rep == "nan"
-		|| rep == "-inff" || rep == "+inff" || rep == "nanf")
-		return 1;
-	else
-		return 0;
-}
-
-//optional sign followed by at least one digit, nothing else.
+//checks if the string is only digits, with an optional + or - in front
 static bool	isInteger(const std::string &rep)
 {
 	size_t	i = 0;
@@ -40,13 +30,12 @@ static bool	isInteger(const std::string &rep)
 	if (i == rep.size())
 		return false;
 	for (; i < rep.size(); i++)
-		if (!std::isdigit(static_cast<unsigned char>(rep[i])))
+		if (!std::isdigit(rep[i]))
 			return false;
 	return true;
 }
 
-//optional sign, digits, exactly one dot, digits : needs at least a digit and the dot.
-//(real C++ float/double literals require the dot, ex: 42.0f, not 42f)
+//checks if the string looks like a double: digits, optional sign, one dot
 static bool	isDouble(const std::string &rep)
 {
 	size_t	i = 0;
@@ -61,7 +50,7 @@ static bool	isDouble(const std::string &rep)
 	{
 		if (rep[i] == '.' && !hasDot)
 			hasDot = true;
-		else if (std::isdigit(static_cast<unsigned char>(rep[i])))
+		else if (std::isdigit(rep[i]))
 			hasDigit = true;
 		else
 			return false;
@@ -69,81 +58,39 @@ static bool	isDouble(const std::string &rep)
 	return hasDigit && hasDot;
 }
 
-//same as a double, with a trailing 'f' (ex: 4.2f).
-static bool	isFloat(const std::string &rep)
-{
-	if (rep.empty() || rep[rep.size() - 1] != 'f')
-		return false;
-	return isDouble(rep.substr(0, rep.size() - 1));
-}
-
 static _type	matchType(const std::string &rep)
 {
-	if (isPseudo(rep))
-		return PSEUDO;
-	if (rep.size() == 1 && !std::isdigit(static_cast<unsigned char>(rep[0])))
+	bool		hasF = false;
+	std::string	body = rep;
+
+	if (rep.size() == 1 && !std::isdigit(rep[0]))
 		return CHAR;
 	if (isInteger(rep))
 		return INT;
-	if (isFloat(rep))
-		return FLOAT;
-	if (isDouble(rep))
-		return DOUBLE;
+	if (!rep.empty() && rep[rep.size() - 1] == 'f')
+	{
+		hasF = true;
+		body = rep.substr(0, rep.size() - 1);
+	}
+	if (isDouble(body))
+	{
+		if (hasF)
+			return FLOAT;
+		else
+			return DOUBLE;
+	}
 	return INVALID;
-}
-
-static double	parsePseudo(const std::string &rep)
-{
-	if (rep == "nan" || rep == "nanf")
-		return std::numeric_limits<double>::quiet_NaN();
-	if (rep == "+inf" || rep == "+inff")
-		return std::numeric_limits<double>::infinity();
-	return -std::numeric_limits<double>::infinity();
-}
-
-static bool	isNan(double value)
-{
-	return value != value;
-}
-
-static bool	isInf(double value)
-{
-	return (value == std::numeric_limits<double>::infinity()
-		|| value == -std::numeric_limits<double>::infinity());
-}
-
-//formats a value the way a literal of type T would be written back out,
-//appending suffix ("f" for float, "" for double) and a special-case label
-//for nan/inf since they don't go through operator<<.
-template <typename T>
-static std::string	formatFloating(double value, const std::string &suffix)
-{
-	if (isNan(value))
-		return "nan" + suffix;
-	if (isInf(value))
-		return (value > 0 ? "+inf" : "-inf") + suffix;
-
-	std::ostringstream	oss;
-	oss << static_cast<T>(value);
-	std::string	str = oss.str();
-	if (str.find('.') == std::string::npos
-		&& str.find('e') == std::string::npos
-		&& str.find('E') == std::string::npos)
-		str += ".0";
-	return str + suffix;
 }
 
 static void	printChar(double value)
 {
-	if (isNan(value) || isInf(value)
-		|| value < static_cast<double>(std::numeric_limits<char>::min())
-		|| value > static_cast<double>(std::numeric_limits<char>::max()))
+	if (value < std::numeric_limits<char>::min() || value > std::numeric_limits<char>::max())
 	{
 		std::cout << "char: impossible" << std::endl;
 		return;
 	}
 	char	c = static_cast<char>(value);
-	if (std::isprint(static_cast<unsigned char>(c)))
+	if (std::isprint(c))
 		std::cout << "char: '" << c << "'" << std::endl;
 	else
 		std::cout << "char: Non displayable" << std::endl;
@@ -151,9 +98,7 @@ static void	printChar(double value)
 
 static void	printInt(double value)
 {
-	if (isNan(value) || isInf(value)
-		|| value < static_cast<double>(std::numeric_limits<int>::min())
-		|| value > static_cast<double>(std::numeric_limits<int>::max()))
+	if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max())
 	{
 		std::cout << "int: impossible" << std::endl;
 		return;
@@ -161,37 +106,81 @@ static void	printInt(double value)
 	std::cout << "int: " << static_cast<int>(value) << std::endl;
 }
 
-static void	printResult(double value)
+static void	printFloat(double value)
 {
-	printChar(value);
-	printInt(value);
-	std::cout << "float: " << formatFloating<float>(value, "f") << std::endl;
-	std::cout << "double: " << formatFloating<double>(value, "") << std::endl;
+	std::ostringstream	oss;
+
+	oss << static_cast<float>(value);
+	std::string	str = oss.str();
+	if (str.find('.') == std::string::npos && str.find('e') == std::string::npos)
+		str += ".0";
+	std::cout << "float: " << str << "f" << std::endl;
 }
 
-//explain switch
+static void	printDouble(double value)
+{
+	std::ostringstream	oss;
+
+	oss << value;
+	std::string	str = oss.str();
+	if (str.find('.') == std::string::npos && str.find('e') == std::string::npos)
+		str += ".0";
+	std::cout << "double: " << str << std::endl;
+}
+
+//the pseudo literals are a fixed list of 6 possible strings, so we just
+//print their known result directly instead of trying to convert them
+static bool	printIfPseudo(const std::string &rep)
+{
+	if (rep == "nan" || rep == "nanf")
+	{
+		std::cout << "char: impossible" << std::endl;
+		std::cout << "int: impossible" << std::endl;
+		std::cout << "float: nanf" << std::endl;
+		std::cout << "double: nan" << std::endl;
+		return true;
+	}
+	if (rep == "+inf" || rep == "+inff")
+	{
+		std::cout << "char: impossible" << std::endl;
+		std::cout << "int: impossible" << std::endl;
+		std::cout << "float: +inff" << std::endl;
+		std::cout << "double: +inf" << std::endl;
+		return true;
+	}
+	if (rep == "-inf" || rep == "-inff")
+	{
+		std::cout << "char: impossible" << std::endl;
+		std::cout << "int: impossible" << std::endl;
+		std::cout << "float: -inff" << std::endl;
+		std::cout << "double: -inf" << std::endl;
+		return true;
+	}
+	return false;
+}
+
 void	ScalarConverter::convert(const std::string &representation)
 {
-	double	value;
+	if (printIfPseudo(representation))
+		return;
 
-	switch (matchType(representation))
+	double	value;
+	_type	type = matchType(representation);
+
+	if (type == CHAR)
+		value = static_cast<double>(representation[0]);
+	else if (type == INT || type == DOUBLE)
+		value = std::strtod(representation.c_str(), NULL);
+	else if (type == FLOAT)
+		value = std::strtod(representation.substr(0, representation.size() - 1).c_str(), NULL);
+	else
 	{
-		case PSEUDO:
-			value = parsePseudo(representation);
-			break;
-		case CHAR:
-			value = static_cast<double>(static_cast<unsigned char>(representation[0]));
-			break;
-		case INT:
-		case DOUBLE:
-			value = std::strtod(representation.c_str(), NULL);
-			break;
-		case FLOAT:
-			value = std::strtod(representation.substr(0, representation.size() - 1).c_str(), NULL);
-			break;
-		default:
-			std::cout << BOLDRED << "Invalid input" << DEFAULT << std::endl;
-			return;
+		std::cout << BOLDRED << "Invalid input" << DEFAULT << std::endl;
+		return;
 	}
-	printResult(value);
+
+	printChar(value);
+	printInt(value);
+	printFloat(value);
+	printDouble(value);
 }
