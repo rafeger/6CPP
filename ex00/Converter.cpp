@@ -178,7 +178,6 @@ void	ScalarConverter::convert(const std::string &representation)
 		std::cout << BOLDRED << "Invalid input" << DEFAULT << std::endl;
 		return;
 	}
-
 	printChar(value);
 	printInt(value);
 	printFloat(value);
